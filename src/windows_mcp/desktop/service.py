@@ -256,26 +256,47 @@ class Desktop:
 
     def execute_command(self, command: str, timeout: int = 10) -> tuple[str, int]:
         try:
-            # Set console encoding to UTF-8 for native executable outputs
-            utf8_command = f"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; {command}"
+            # $OutputEncoding: controls how PS5.1 encodes output written to its stdout pipe.
+            # Without this set to UTF-8, PS5.1 uses the system codepage and native process
+            # stdout is silently lost when Python reads the pipe.
+            # [Console]::OutputEncoding: controls how PS decodes bytes from native exe stdout.
+            utf8_command = (
+                "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                f"{command}"
+            )
             encoded = base64.b64encode(utf8_command.encode("utf-16le")).decode("ascii")
             env = os.environ.copy()
-            # Fix PATHEXT if clobbered by venv activation (uv strips it to .CPL)
-            if ".EXE" not in env.get("PATHEXT", ""):
+
+            # Rebuild PATH and PATHEXT from registry so system executables (e.g. OpenSSH at
+            # C:\Windows\System32\OpenSSH) are discoverable without requiring absolute paths.
+            # The inherited env may be stripped down by venv activation or the MCP host.
+            try:
+                import winreg
+
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+                ) as machine_key:
+                    machine_path = winreg.QueryValueEx(machine_key, "PATH")[0]
+                    if ".EXE" not in env.get("PATHEXT", ""):
+                        env["PATHEXT"] = winreg.QueryValueEx(machine_key, "PATHEXT")[0]
+
                 try:
-                    import winreg
-                    with winreg.OpenKey(
-                        winreg.HKEY_LOCAL_MACHINE,
-                        r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-                    ) as key:
-                        env["PATHEXT"] = winreg.QueryValueEx(key, "PATHEXT")[0]
-                except Exception:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as user_key:
+                        user_path = winreg.QueryValueEx(user_key, "PATH")[0]
+                except FileNotFoundError:
+                    user_path = ""
+
+                env["PATH"] = ";".join(filter(None, [machine_path, user_path, env.get("PATH", "")]))
+            except Exception:
+                if ".EXE" not in env.get("PATHEXT", ""):
                     env["PATHEXT"] = ".COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL;.PY;.PYW"
 
             shell = "pwsh" if shutil.which("pwsh") else "powershell"
-                
+
             args = [shell, "-NoProfile"]
-            # Only older Windows PowerShell (5.1) uses -OutputFormat Text successfully here 
+            # Only older Windows PowerShell (5.1) uses -OutputFormat Text successfully here
             shell_name = os.path.basename(shell).lower().replace(".exe", "")
             if shell_name == "powershell":
                 args.extend(["-OutputFormat", "Text"])
