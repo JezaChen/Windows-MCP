@@ -665,8 +665,17 @@ class Desktop:
             try:
                 for thread in (foreground_thread, target_thread):
                     if thread and thread != current_tid:
-                        win32process.AttachThreadInput(current_tid, thread, True)
-                        attached_threads.append(thread)
+                        try:
+                            win32process.AttachThreadInput(current_tid, thread, True)
+                            attached_threads.append(thread)
+                        except Exception as e:
+                            # AttachThreadInput fails with Access Denied for elevated
+                            # processes (e.g. Settings, Task Manager). Skip the attach
+                            # and still attempt SetForegroundWindow below.
+                            logger.debug(
+                                f"AttachThreadInput failed for thread {thread} "
+                                f"(likely elevated process), skipping: {e}"
+                            )
 
                 win32gui.SetForegroundWindow(target_handle)
                 win32gui.BringWindowToTop(target_handle)
