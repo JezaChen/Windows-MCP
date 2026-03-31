@@ -444,6 +444,12 @@ All variables are optional unless noted. Set them via the `env` key in `claude_d
 |---|---|---|
 | `ANONYMIZED_TELEMETRY` | `true` | Set to `false` to disable anonymous usage telemetry. No personal data, tool arguments, or outputs are ever collected regardless of this setting. |
 
+### Debug
+
+| Variable | Default | Description |
+|---|---|---|
+| `WINDOWS_MCP_DEBUG` | `false` | Set to `1`, `true`, `yes`, or `on` to enable debug mode, which sets the log level to DEBUG for verbose output. Also available as the `--debug` CLI flag. |
+
 ### Remote Mode
 
 | Variable | Default | Description |
@@ -466,7 +472,8 @@ All variables are optional unless noted. Set them via the `env` key in `claude_d
         "WINDOWS_MCP_SCREENSHOT_SCALE": "0.5",
         "WINDOWS_MCP_SCREENSHOT_BACKEND": "auto",
         "WINDOWS_MCP_PROFILE_SNAPSHOT": "false",
-        "ANONYMIZED_TELEMETRY": "true"
+        "ANONYMIZED_TELEMETRY": "true",
+        "WINDOWS_MCP_DEBUG": "false"
       }
     }
   }
