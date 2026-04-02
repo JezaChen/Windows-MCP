@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from windows_mcp.auth import AuthClient
+from windows_mcp.config import is_debug, enable_debug
 from fastmcp import FastMCP
 from dataclasses import dataclass, field
 from textwrap import dedent
@@ -59,8 +60,10 @@ def _build_local_mcp() -> FastMCP:
         try:
             watchdog.start()
             await asyncio.sleep(1)  # Simulate startup latency
+            logger.debug("Server started, entering main loop")
             yield
         finally:
+            logger.debug("Shutting down: stopping watchdog and analytics")
             if watchdog:
                 watchdog.stop()
             if analytics:
@@ -142,6 +145,7 @@ def _run_remote_mode(config: Config, transport: str, host: str, port: int) -> No
         case _:
             raise ValueError(f"Invalid transport: {transport}")
 
+
 @click.command()
 @click.option(
     "--transport",
@@ -163,20 +167,39 @@ def _run_remote_mode(config: Config, transport: str, host: str, port: int) -> No
     type=int,
     show_default=True,
 )
+@click.option(
+    "--debug",
+    help="Enable debug mode to provide verbose logging for troubleshooting.",
+    is_flag=True,
+    default=False,
+    show_default=True,
+)
+def main(transport, host, port, debug):
+    if debug:
+        enable_debug()
 
-def main(transport, host, port):
+    if is_debug():
+        logging.basicConfig(level=logging.DEBUG)
+
     config = Config(
         mode=os.getenv("MODE", Mode.LOCAL.value).lower(),
         sandbox_id=os.getenv("SANDBOX_ID", ''),
         api_key=os.getenv("API_KEY", '')
     )
-    match config.mode:
-        case Mode.LOCAL.value:
-            _run_local_mode(transport=transport, host=host, port=port)
-        case Mode.REMOTE.value:
-            _run_remote_mode(config=config, transport=transport, host=host, port=port)
-        case _:
-            raise ValueError(f"Invalid mode: {config.mode}")
+    logger.debug("Starting windows-mcp (mode=%s, transport=%s)", config.mode, transport)
+    try:
+        match config.mode:
+            case Mode.LOCAL.value:
+                _run_local_mode(transport=transport, host=host, port=port)
+            case Mode.REMOTE.value:
+                _run_remote_mode(config=config, transport=transport, host=host, port=port)
+            case _:
+                raise ValueError(f"Invalid mode: {config.mode}")
+        logger.debug("Server shut down normally")
+    except Exception:
+        logger.error("Server exiting due to unhandled exception", exc_info=True)
+        raise
+
 
 if __name__ == "__main__":
     main()

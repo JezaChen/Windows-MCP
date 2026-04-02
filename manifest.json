@@ -33,7 +33,8 @@
         "SANDBOX_ID": "${user_config.sandbox_id}",
         "API_KEY": "${user_config.api_key}",
         "WINDOWS_MCP_PROFILE_SNAPSHOT": "${user_config.profile_snapshot}",
-        "WINDOWS_MCP_SCREENSHOT_BACKEND": "${user_config.screenshot_backend}"
+        "WINDOWS_MCP_SCREENSHOT_BACKEND": "${user_config.screenshot_backend}",
+        "WINDOWS_MCP_DEBUG": "${user_config.debug}"
       }
     }
   },
@@ -76,13 +77,14 @@
       "title": "Screenshot Backend",
       "description": "The engine used to capture screenshots. 'auto' automatically selects the fastest available backend (DXGI -> MSS -> Pillow). Use 'pillow' if you encounter capture issues.",
       "required": false,
-      "default": "auto",
-      "enum": [
-        "auto",
-        "dxcam",
-        "mss",
-        "pillow"
-      ]
+      "default": "auto"
+    },
+    "debug": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable debug mode to provide verbose logging for troubleshooting.",
+      "required": false,
+      "default": false
     }
   },
   "tools": [
