@@ -24,6 +24,10 @@ and actionable recommendations.
 - **Measure two dimensions**: correctness (return value matches expectations) and response time (end-to-end, including MCP overhead).
 - **Mandatory side-effect verification**: every tool call that may modify system state MUST be independently verified — no exceptions, no sampling.
 - **Safe cleanup**: track process PIDs spawned during testing; only kill those specific PIDs during teardown, never kill by process name alone.
+- **Safety first**: Windows-MCP has full system access with no sandboxing. Tests involving
+  destructive tools (FileSystem delete, Registry set/delete, Process kill, PowerShell) can
+  modify or destroy data. Running in a **VM or Windows Sandbox** is strongly recommended.
+  Before executing destructive test cases, confirm the user accepts the risk. See `SECURITY.md`.
 - **Produce a structured report** at the end (see Step 4).
 
 ---
@@ -201,25 +205,37 @@ Run each test case sequentially. For each test:
    Save the returned integer as `$t_start`.
 3. **Call the MCP tool** with the specified parameters
 4. **Record end time** — immediately after the tool returns, call PowerShell again with the same command. Save as `$t_end`.
-5. **Compute elapsed time** — `elapsed_ms = $t_end - $t_start` (end-to-end including MCP overhead).
-6. **Capture the response** — store the full return value and its character length as `response_size`.
+5. **Compute elapsed time** — `elapsed_ms = $t_end - $t_start`. Note: this includes MCP
+   overhead from the timestamp calls themselves (~3-5s each). Use for relative comparison
+   between test cases only. **When testing the PowerShell tool itself**, timing is
+   self-referential — record times as `N/A (self-referential)` and rely on the PowerShell
+   tool's own `timeout` behavior and status codes for performance assessment instead.
+6. **Capture the response** — store the full return value and measure `response_size`:
+   - **Text-only tools**: character count of the returned string.
+   - **Mixed-content tools** (Screenshot, Snapshot): character count of the **text portion only**,
+     note `+image` in the report. Do not attempt to measure image byte size.
 7. **Evaluate correctness** — compare the response against expected behavior:
    - Does the response indicate success/failure as expected?
    - Does the response content match expected patterns?
    - For error cases: does the error message make sense and provide useful information?
 8. **Verify side effects (MANDATORY)** — independently verify EVERY mutating tool call. Never
-   rely solely on the tool's return value. Never skip or sample. Verification methods:
-   - **Move/Click**: call Screenshot or Snapshot to verify the cursor actually moved to the
-     reported coordinates, or that the expected UI change occurred.
-   - **Type**: use Shortcut (Ctrl+A → Ctrl+C) then Clipboard get to capture exact text for
-     comparison. This is more reliable than Screenshot, especially on high-DPI displays.
+   rely solely on the tool's return value. Never skip or sample.
+   **Rule: verification MUST NOT use the same tool under test.** Use a different tool
+   (preferably PowerShell) to cross-check. Verification methods:
+   - **Move/Click**: call Screenshot or Snapshot to verify the expected UI change occurred.
+   - **Type**: use Shortcut (Ctrl+A → Ctrl+C) then PowerShell `Get-Clipboard` to capture
+     exact text for comparison.
    - **Drag (Move with drag=True)**: call Snapshot to verify the target window actually moved.
-   - **App (launch/resize)**: call Snapshot to verify the window appeared or changed size/position.
-   - **FileSystem (write/copy/move/delete)**: call FileSystem read/list/info to verify the
-     file system state matches expectations.
-   - **Registry (set/delete)**: call Registry get/list to verify the registry state changed.
-   - **Clipboard (set)**: call Clipboard get to verify the content was stored.
-   - **Process (kill)**: call Process list to verify the process is gone.
+   - **App (launch/resize)**: call PowerShell (`Get-Process`) to verify process exists, and
+     Screenshot/Snapshot to verify window position/size.
+   - **FileSystem**: verify with PowerShell (`Test-Path`, `Get-Content`, `Get-ChildItem`)
+     — never with the FileSystem tool itself.
+   - **Registry**: verify with PowerShell (`Get-ItemProperty`, `reg query`)
+     — never with the Registry tool itself.
+   - **Clipboard (set)**: verify with PowerShell (`Get-Clipboard`)
+     — never with the Clipboard tool itself.
+   - **Process (kill)**: verify with PowerShell (`Get-Process -Id $pid`)
+     — never with the Process tool itself.
    - **Shortcut**: call Screenshot to verify the shortcut's expected effect occurred.
    - For read-only tools (Screenshot, Snapshot, Scrape, Process list), this step is not needed.
    - If verification fails but the tool reported success, mark the test as **FAIL** and note
