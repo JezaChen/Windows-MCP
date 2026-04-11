@@ -66,6 +66,22 @@ class TestBackendRegistry:
 
         assert "_test_incomplete" not in _ScreenshotBackend.registry
 
+    def test_inherited_subclass_does_not_overwrite_registry(self):
+        """A subclass that inherits name/priority without overriding should not register."""
+        original = _ScreenshotBackend.registry.get("pillow")
+
+        class _ChildPillow(_PillowBackend):
+            pass  # inherits name="pillow", priority=100 but doesn't define them in __dict__
+
+        assert _ScreenshotBackend.registry["pillow"] is original
+
+    def test_duplicate_name_raises_value_error(self):
+        with pytest.raises(ValueError, match="Duplicate screenshot backend name"):
+
+            class _Conflict(_ScreenshotBackend):
+                name = "pillow"
+                priority = 50
+
     def test_auto_chain_respects_priority_order(self):
         classes = sorted(_ScreenshotBackend.registry.values(), key=lambda c: c.priority)
         names = [c.name for c in classes]

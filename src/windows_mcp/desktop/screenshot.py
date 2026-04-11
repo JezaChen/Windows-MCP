@@ -77,7 +77,10 @@ class _ScreenshotBackend:
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
-        if hasattr(cls, "name") and hasattr(cls, "priority"):
+        if "name" in cls.__dict__ and "priority" in cls.__dict__:
+            existing = _ScreenshotBackend.registry.get(cls.name)
+            if existing is not None and existing is not cls:
+                raise ValueError(f"Duplicate screenshot backend name: {cls.name!r}")
             _ScreenshotBackend.registry[cls.name] = cls
 
     def is_available(self, capture_rect: uia.Rect | None) -> bool:
