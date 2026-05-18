@@ -18,7 +18,6 @@ from windows_mcp.desktop import screenshot as screenshot_capture
 from windows_mcp.desktop import flash_overlay
 from windows_mcp.infrastructure import validate_url
 from locale import getpreferredencoding
-from contextlib import contextmanager
 from typing import Literal
 from markdownify import markdownify
 from fuzzywuzzy import process
@@ -296,9 +295,6 @@ class Desktop:
     def get_cursor_location(self) -> tuple[int, int]:
         return uia.GetCursorPos()
 
-    def get_element_under_cursor(self) -> uia.Control:
-        return uia.ControlFromCursor()
-
     def get_apps_from_start_menu(self) -> dict[str, str]:
         """Get installed apps. Tries Get-StartApps first, falls back to shortcut scanning."""
         command = "Get-StartApps | ConvertTo-Csv -NoTypeInformation"
@@ -357,12 +353,6 @@ class Desktop:
             return Browser.has_process(process.name())
         except Exception:
             return False
-
-    def get_default_language(self) -> str:
-        command = "Get-Culture | Select-Object Name,DisplayName | ConvertTo-Csv -NoTypeInformation"
-        response, _ = PowerShellExecutor.execute_command(command)
-        reader = csv.DictReader(io.StringIO(response))
-        return "".join([row.get("DisplayName") for row in reader])
 
     def _find_window_by_name(
         self, name: str, refresh_state: bool = False
@@ -426,11 +416,6 @@ class Desktop:
             width, height = size
             window_control.MoveWindow(x, y, width, height)
             return (f"{target_window.name} resized to {width}x{height} at {x},{y}.", 0)
-
-    def is_app_running(self, name: str) -> bool:
-        windows, _ = self.get_windows()
-        windows_dict = {window.name: window for window in windows}
-        return process.extractOne(name, list(windows_dict.keys()), score_cutoff=60) is not None
 
     def app(
         self,
@@ -779,26 +764,6 @@ class Desktop:
         content = markdownify(html=html)
         return content
 
-    def get_window_from_element(self, element: uia.Control) -> Window | None:
-        if element is None:
-            return None
-        top_window = element.GetTopLevelControl()
-        if top_window is None:
-            return None
-        handle = top_window.NativeWindowHandle
-        windows, _ = self.get_windows()
-        for window in windows:
-            if window.handle == handle:
-                return window
-        return None
-
-    def is_window_visible(self, window: uia.Control) -> bool:
-        is_minimized = self.get_window_status(window) != Status.MINIMIZED
-        size = window.BoundingRectangle
-        area = size.width() * size.height()
-        is_overlay = self.is_overlay_window(window)
-        return not is_overlay and is_minimized and area > 10
-
     def is_overlay_window(self, element: uia.Control) -> bool:
         no_children = len(element.GetChildren()) == 0
         is_name = "Overlay" in element.Name.strip()
@@ -935,64 +900,6 @@ class Desktop:
             logger.error(f"Error in get_windows: {ex}")
             windows = []
         return windows, window_handles
-
-    def get_xpath_from_element(self, element: uia.Control):
-        current = element
-        if current is None:
-            return ""
-        path_parts = []
-        while current is not None:
-            parent = current.GetParentControl()
-            if parent is None:
-                # we are at the root node
-                path_parts.append(f"{current.ControlTypeName}")
-                break
-            children = parent.GetChildren()
-            same_type_children = [
-                "-".join(map(lambda x: str(x), child.GetRuntimeId()))
-                for child in children
-                if child.ControlType == current.ControlType
-            ]
-            index = same_type_children.index(
-                "-".join(map(lambda x: str(x), current.GetRuntimeId()))
-            )
-            if same_type_children:
-                path_parts.append(f"{current.ControlTypeName}[{index + 1}]")
-            else:
-                path_parts.append(f"{current.ControlTypeName}")
-            current = parent
-        path_parts.reverse()
-        xpath = "/".join(path_parts)
-        return xpath
-
-    def get_windows_version(self) -> str:
-        response, status = PowerShellExecutor.execute_command(
-            "(Get-CimInstance Win32_OperatingSystem).Caption"
-        )
-        if status == 0:
-            return response.strip()
-        return "Windows"
-
-    def get_user_account_type(self) -> str:
-        response, status = PowerShellExecutor.execute_command(
-            "(Get-LocalUser -Name $env:USERNAME).PrincipalSource"
-        )
-        return (
-            "Local Account"
-            if response.strip() == "Local"
-            else "Microsoft Account"
-            if status == 0
-            else "Local Account"
-        )
-
-    def get_dpi_scaling(self):
-        try:
-            user32 = ctypes.windll.user32
-            dpi = user32.GetDpiForSystem()
-            return dpi / 96.0 if dpi > 0 else 1.0
-        except Exception:
-            # Fallback to standard DPI if system call fails
-            return 1.0
 
     def get_screen_size(self) -> Size:
         width, height = uia.GetVirtualScreenSize()
@@ -1434,12 +1341,3 @@ class Desktop:
         if not killed:
             return f'No process matching "{name}" found or access denied.'
         return f"{'Force killed' if force else 'Terminated'}: {', '.join(killed)}"
-
-    @contextmanager
-    def auto_minimize(self):
-        try:
-            handle = uia.GetForegroundWindow()
-            uia.ShowWindow(handle, win32con.SW_MINIMIZE)
-            yield
-        finally:
-            uia.ShowWindow(handle, win32con.SW_RESTORE)
