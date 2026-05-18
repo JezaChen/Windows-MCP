@@ -165,7 +165,17 @@ MAX_NODES = 30000
 
 
 def role_name(role: object) -> str:
-    """Map an accRole result (int or BSTR) to a friendly control-type name."""
+    """Map an ``accRole`` result to a friendly control-type name.
+
+    Args:
+        role: Either an ``int`` role constant (the usual MSAA case, e.g.
+            ``ROLE_LINK``) or a ``BSTR`` string (Firefox returns these for IA2
+            role extensions like ``"heading"`` or ``"article"``).
+
+    Returns:
+        Lower-cased role name (e.g. ``"link"``, ``"button"``, ``"heading"``),
+        or ``"unknown"`` if the role can't be mapped or is empty.
+    """
     if isinstance(role, str):
         return role.strip().lower() or "unknown"
     if isinstance(role, int):
@@ -439,7 +449,20 @@ class _Walker:
 
 
 class IA2TraversalResult:
-    """Output of :func:`traverse_window`."""
+    """Result of a single :func:`traverse_window` call.
+
+    Attributes:
+        dom_bounding_box: Bounding box of the active document element, or
+            the fallback window box if no document was found. ``None`` only
+            when both inputs were ``None``.
+        informative_nodes: ``TextElementNode`` list for visible non-interactive
+            content (headings, paragraphs, alt text, etc.).
+        interactive_nodes: ``TreeElementNode`` list for clickable / focusable
+            elements (links, buttons, form fields).
+
+    The instance is falsy when both node lists are empty — call sites use
+    ``if result:`` to skip the no-DOM case.
+    """
 
     __slots__ = ("dom_bounding_box", "informative_nodes", "interactive_nodes")
 
@@ -462,10 +485,27 @@ def traverse_window(
     window_name: str,
     window_bounding_box: Optional[BoundingBox] = None,
 ) -> IA2TraversalResult:
-    """Walk the IAccessible tree of *hwnd* and return DOM-shaped node lists.
+    """Walk the IAccessible tree of ``hwnd`` and return DOM-shaped node lists.
 
-    ``window_bounding_box`` is used to clip element rectangles to the window's
-    visible area, matching what the UIA path does via :py:meth:`Tree.iou_bounding_box`.
+    Used as a fallback for Firefox, whose web DOM is only reachable via
+    MSAA / IAccessible2 (it does not expose ``RootWebArea`` through UIA).
+
+    Args:
+        hwnd: Win32 window handle of the browser window to walk.
+        window_name: Title of the window, attached to each emitted node for
+            downstream display and matching against active-window state.
+        window_bounding_box: Outer window rectangle. Used to clip element
+            rectangles to the visible area, matching what the UIA path does
+            via :py:meth:`Tree.iou_bounding_box`. ``None`` disables clipping.
+
+    Returns:
+        :class:`IA2TraversalResult` containing the (possibly empty)
+        informative and interactive node lists plus the bounding box of the
+        active document (or ``window_bounding_box`` if no document was found).
+
+    The function never raises: COM acquisition or walk failures are logged at
+    ``WARNING`` and an empty :class:`IA2TraversalResult` is returned so callers
+    can fall back to the no-DOM error path.
     """
     iface = _iaccessible()
     try:
