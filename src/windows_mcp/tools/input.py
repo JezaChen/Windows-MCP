@@ -29,8 +29,16 @@ def _resolve_label(desktop: Any, label: int) -> list[int]:
         raise ValueError(f"Failed to find element with label {label}: {e}")
 
 
-def _as_bool(value: bool | str) -> bool:
-    return value is True or (isinstance(value, str) and value.lower() == "true")
+def _as_bool(value: bool | str, name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    raise ValueError(f"{name} must be true or false")
 
 
 def _as_loc(value: list | str | None) -> list | None:
@@ -345,7 +353,7 @@ def register(
         desktop = get_desktop()
         loc = _as_loc(loc)
         from_loc = _as_loc(from_loc)
-        drag = _as_bool(drag)
+        drag = _as_bool(drag, "drag")
         if loc is None and label is None:
             raise ValueError("Either loc or label must be provided.")
         if label is not None:
@@ -452,7 +460,7 @@ def register(
             interval=interval,
         )
         desktop = get_desktop()
-        use_dom_bool = _as_bool(use_dom)
+        use_dom_bool = _as_bool(use_dom, "use_dom")
         started_at = time.monotonic()
         deadline = started_at + timeout
         attempts = 0

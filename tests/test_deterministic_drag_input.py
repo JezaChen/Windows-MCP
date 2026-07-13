@@ -54,6 +54,16 @@ def test_move_tool_preserves_legacy_move_behavior() -> None:
     assert desktop.drag_calls == []
 
 
+def test_move_tool_rejects_invalid_drag_boolean_before_input() -> None:
+    desktop = FakeDesktop()
+
+    with pytest.raises(ValueError, match="drag must be true or false"):
+        asyncio.run(_tools(desktop)["Move"](loc=[10, 20], drag="tru"))
+
+    assert desktop.move_calls == []
+    assert desktop.drag_calls == []
+
+
 def test_move_tool_annotations_cover_drag_side_effects() -> None:
     desktop = FakeDesktop()
     mcp = FakeMCP()
