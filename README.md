@@ -339,6 +339,18 @@ args=[
 </details>
 
 <details>
+  <summary>Install in Autohand Code</summary>
+
+  Add the published stdio server from a Windows terminal:
+
+  ```shell
+  autohand mcp add windows-mcp uvx windows-mcp serve
+  ```
+
+  Add `--scope project` after `add` to keep the server configuration in the current project. See [Autohand Code](https://github.com/autohandai/code-cli/) for current installation and CLI details.
+</details>
+
+<details>
   <summary>Install in Claude Code</summary>
 
   1. Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview):
